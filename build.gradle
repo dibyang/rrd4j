@@ -9,6 +9,14 @@ buildscript {
   dependencies {
     classpath 'net.researchgate:gradle-release:2.6.0'
   }
+  gradle.taskGraph.whenReady {
+    tasks.each { task ->
+      if (task.name.contains("test"))
+      {
+        task.enabled = false
+      }
+    }
+  }
 }
 
 apply plugin: 'maven'
