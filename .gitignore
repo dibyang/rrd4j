@@ -1,0 +1,4 @@
+/build/
+/.circleci/
+/.gradle/
+/.idea/

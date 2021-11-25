@@ -1,0 +1,99 @@
+
+buildscript {
+  repositories {
+    maven {
+      name "REPO_NEXUS"
+      url "http://${nexus_host}:8081/repository/maven-public/"
+    }
+  }
+  dependencies {
+    classpath 'net.researchgate:gradle-release:2.6.0'
+  }
+}
+
+apply plugin: 'maven'
+apply plugin: 'net.researchgate.release'
+apply plugin: 'java'
+
+release {
+  failOnUnversionedFiles = true
+  failOnCommitNeeded = true
+  failOnPublishNeeded = true
+  failOnSnapshotDependencies = false
+  failOnUpdateNeeded = true
+  revertOnFail = true
+  tagTemplate = 'v${version}'
+  scmAdapters = [
+      net.researchgate.release.GitAdapter
+  ]
+
+  git {
+    requireBranch = 'master'
+    pushToRemote = 'origin'
+    pushToBranchPrefix = ''
+    commitVersionFileOnly = false
+    signTag = false
+  }
+
+}
+
+
+
+group 'com.ls.rrd4j'
+
+afterReleaseBuild.dependsOn uploadArchives
+
+tasks.withType(JavaCompile) {
+  options.encoding = "UTF-8"
+}
+
+repositories {
+  mavenLocal()
+  maven {
+    name "REPO_NEXUS"
+    url "http://${nexus_host}:8081/repository/maven-public/"
+  }
+  mavenCentral()
+}
+
+dependencies {
+    implementation 'com.sleepycat:je:18.3.12'
+    implementation 'org.mongodb:mongo-java-driver:3.12.10'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.easymock:easymock:4.3'
+    testImplementation 'org.ops4j.pax.exam:pax-exam-container-native:4.13.4'
+    testImplementation 'org.ops4j.pax.exam:pax-exam-junit4:4.13.4'
+    testImplementation 'org.ops4j.pax.exam:pax-exam-link-mvn:4.13.4'
+    testImplementation 'org.apache.felix:org.apache.felix.framework:7.0.1'
+    testImplementation 'org.apache.logging.log4j:log4j-api:2.14.1'
+    testImplementation 'org.apache.logging.log4j:log4j-core:2.14.1'
+    testImplementation 'org.apache.logging.log4j:log4j-slf4j-impl:2.14.1'
+}
+
+description = 'RRD4J'
+
+java {
+    withSourcesJar()
+}
+
+uploadArchives {
+  repositories {
+    mavenDeployer {
+      repository(url: "http://${nexus_host}:8081/repository/maven-releases/") {
+        authentication(userName: project.rootProject.username, password: project.rootProject.password)
+      }
+      snapshotRepository(url: "http://${nexus_host}:8081/repository/maven-snapshots/") {
+        authentication(userName: project.rootProject.username, password: project.rootProject.password)
+      }
+    }
+  }
+}
+
+artifacts {
+  archives jar
+  archives sourcesJar
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
