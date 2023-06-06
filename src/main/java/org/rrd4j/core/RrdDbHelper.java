@@ -15,6 +15,10 @@ public class RrdDbHelper {
 
   static final RrdDbPool pool = new RrdDbPool();
 
+  public static RrdDbPool getRrdDbPool(){
+    return pool;
+  }
+
   public static RrdDb of(RrdDef rrdDef) throws IOException {
     RrdDb db = null;
     File rrdFile = new File(rrdDef.getPath());
