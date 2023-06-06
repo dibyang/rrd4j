@@ -2,3 +2,4 @@
 /.circleci/
 /.gradle/
 /.idea/
+/signing.properties
