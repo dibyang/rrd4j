@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 /**
+ * RRD数据结构自动升级和RrdDb池支持
  * @author yangzj
  * @date 2021/12/7
  */
@@ -15,10 +16,20 @@ public class RrdDbHelper {
 
   static final RrdDbPool pool = new RrdDbPool();
 
+  /**
+   * 获取默认的RrdDb池
+   * @return 默认的RrdDb池
+   */
   public static RrdDbPool getRrdDbPool(){
     return pool;
   }
 
+  /**
+   * 根据RrdDef的定义，确定是否需要升级RRD数据结构
+   * @param rrdDef
+   * @return
+   * @throws IOException
+   */
   public static RrdDb of(RrdDef rrdDef) throws IOException {
     RrdDb db = null;
     File rrdFile = new File(rrdDef.getPath());
