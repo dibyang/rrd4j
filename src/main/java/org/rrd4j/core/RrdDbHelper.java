@@ -1,6 +1,8 @@
 package org.rrd4j.core;
 
 
+import org.rrd4j.ConsolFun;
+import org.rrd4j.DsType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 
 /**
  * RRD数据结构自动升级和RrdDb池支持
@@ -92,5 +95,48 @@ public class RrdDbHelper {
       }
     }
     Files.move(oldFile.toPath(), Paths.get(bakPath), StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+  }
+
+  public static void main(String[] args) throws IOException, InterruptedException {
+    RrdDef rrdDef = buildRrdDef("/test/rrd/test.rrd");
+    for (int i = 0; i < 1000; i++) {
+      try(RrdDb rrdDb = RrdDbHelper.of(rrdDef)) {
+        //do something
+        Thread.sleep(3000);
+        System.out.println("i = " + i + ", rrdDb = " + rrdDb);
+      }
+    }
+  }
+
+  private static RrdDef buildRrdDef(String rrdPath) {
+    File rrddir = new File(rrdPath).getParentFile();
+    if (!rrddir.exists()) {
+      rrddir.mkdirs();
+    }
+    RrdDef rrdDef;
+    rrdDef = new RrdDef(rrdPath, 5);
+    for (String type  : Arrays.asList("cpu_user","cpu_wait")) {
+      rrdDef.addDatasource(type, DsType.GAUGE, 60, 0, Double.MAX_VALUE);
+    }
+    rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 1, 240);
+    rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 6, 240);
+    rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 60, 288);
+    rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 720, 240);
+    rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 2880, 240);
+    rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 17280, 1000);
+    rrdDef.addArchive(ConsolFun.MAX, 0.5, 1, 240);
+    rrdDef.addArchive(ConsolFun.MAX, 0.5, 6, 240);
+    rrdDef.addArchive(ConsolFun.MAX, 0.5, 60, 288);
+    rrdDef.addArchive(ConsolFun.MAX, 0.5, 720, 240);
+    rrdDef.addArchive(ConsolFun.MAX, 0.5, 2880, 240);
+    rrdDef.addArchive(ConsolFun.MAX, 0.5, 17280, 1000);
+    rrdDef.addArchive(ConsolFun.MIN, 0.5, 1, 240);
+    rrdDef.addArchive(ConsolFun.MIN, 0.5, 6, 240);
+    rrdDef.addArchive(ConsolFun.MIN, 0.5, 60, 288);
+    rrdDef.addArchive(ConsolFun.MIN, 0.5, 720, 240);
+    rrdDef.addArchive(ConsolFun.MIN, 0.5, 2880, 240);
+    rrdDef.addArchive(ConsolFun.MIN, 0.5, 17280, 1000);
+
+    return rrdDef;
   }
 }
