@@ -380,14 +380,10 @@ public class RrdDbPool {
      */
     private RrdEntry waitEmpty(URI uri) throws IOException, InterruptedException {
         RrdEntry ref = getEntry(uri, true);
-        System.out.println("uri = " + uri);
-        System.out.println("ref = " + ref);
         try {
             while (ref.count != 0) {
-                System.out.println("1 ref.count = " + ref.count);
                 //Not empty, give it back, but wait for signal
                 passNext(ACTION.SWAP, ref);
-                System.out.println("2 ref.count = " + ref.count);
                 ref.waitempty.await();
                 ref = getEntry(uri, true);
             }

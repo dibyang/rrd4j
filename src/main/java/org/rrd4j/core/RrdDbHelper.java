@@ -105,8 +105,8 @@ public class RrdDbHelper {
   }
 
   public static void main(String[] args) throws IOException, InterruptedException {
-
-    ExecutorService service = Executors.newFixedThreadPool(50);
+    RrdDbHelper.getRrdDbPool().setCapacity(10);
+    ExecutorService service = Executors.newFixedThreadPool(100);
     int count =300;
     int n = 5;
     CountDownLatch countDownLatch = new CountDownLatch(n*count);
