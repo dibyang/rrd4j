@@ -12,6 +12,9 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * RRD数据结构自动升级和RrdDb池支持
@@ -41,71 +44,93 @@ public class RrdDbHelper {
     RrdDb db = null;
 
     File rrdFile = new File(rrdDef.getPath());
-    if (rrdFile.exists()) {
-      db = RrdDb.getBuilder().setPool(pool).setPath(rrdFile.toURI())
-        .build();
-      //LOG.info("check rrd def");
-      final String oldPath = rrdFile.getPath() + ".old";
-      final String bakPath = rrdFile.getPath() + ".bak";
-      File oldFile = new File(oldPath);
-      if(!db.getRrdDef().equals(rrdDef)){
-        LOG.info("rrd {} def need upgrade.", rrdDef.getPath());
-        db.close();
-        //LOG.info("rrd db close");
+    synchronized (rrdDef.getPath().intern()){
+      if (rrdFile.exists()) {
+        db = RrdDb.getBuilder().setPool(pool).setPath(rrdFile.toURI())
+            .build();
+        //LOG.info("check rrd def");
+        final String oldPath = rrdFile.getPath() + ".old";
+        final String bakPath = rrdFile.getPath() + ".bak";
+        File oldFile = new File(oldPath);
+        if(!db.getRrdDef().equals(rrdDef)){
+          LOG.info("rrd {} def need upgrade.", rrdDef.getPath());
+          db.close();
+          //LOG.info("rrd db close");
 
-        Files.move(rrdFile.toPath(), Paths.get(oldPath), StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
-        //LOG.info("rrd db backup");
+          Files.move(rrdFile.toPath(), Paths.get(oldPath), StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+          //LOG.info("rrd db backup");
+          db = RrdDb.getBuilder().setPool(pool).setRrdDef(rrdDef)
+              .build();
+          //LOG.info("build new rrd db");
+          importOldData(db, oldFile, bakPath);
+          LOG.info("rrd {} upgrade finished.", rrdDef.getPath());
+        }else if(oldFile.exists()){
+          importOldData(db, oldFile, bakPath);
+          LOG.info("rrd {} upgrade finished.", rrdDef.getPath());
+        }
+      }else {
         db = RrdDb.getBuilder().setPool(pool).setRrdDef(rrdDef)
-          .build();
-        //LOG.info("build new rrd db");
-        importOldData(db, oldFile, bakPath);
-        LOG.info("rrd {} upgrade finished.", rrdDef.getPath());
-      }else if(oldFile.exists()){
-        importOldData(db, oldFile, bakPath);
-        LOG.info("rrd {} upgrade finished.", rrdDef.getPath());
+            .build();
       }
-    }else {
-      db = RrdDb.getBuilder().setPool(pool).setRrdDef(rrdDef)
-        .build();
     }
     return db;
   }
 
   private static void importOldData(RrdDb db, File oldFile, String bakPath) throws IOException {
-    try(RrdDb old = RrdDb.of(oldFile.getPath())){
-      final Datasource[] datasources = db.getDatasources();
-      for (int i = 0; i < datasources.length; i++) {
-        Datasource ds = datasources[i];
-        if (old.containsDs(ds.getName())) {
-          Datasource oldDatasource = old.getDatasource(ds.getName());
-          if(oldDatasource.getType().equals(ds.getType())){
-            oldDatasource.copyStateTo(ds);
-            //LOG.info("update rrd ds: {}", ds.getName());
+    if (oldFile.exists()) {
+      try (RrdDb old = RrdDb.of(oldFile.getPath())) {
+        final Datasource[] datasources = db.getDatasources();
+        for (int i = 0; i < datasources.length; i++) {
+          Datasource ds = datasources[i];
+          if (old.containsDs(ds.getName())) {
+            Datasource oldDatasource = old.getDatasource(ds.getName());
+            if (oldDatasource.getType().equals(ds.getType())) {
+              oldDatasource.copyStateTo(ds);
+              //LOG.info("update rrd ds: {}", ds.getName());
+            }
+          }
+        }
+        Archive[] archives = db.getArchives();
+        for (int i = 0; i < archives.length; i++) {
+          Archive archive = archives[i];
+          final Archive oldArchive = old.getArchive(archive.getConsolFun(), archive.getSteps());
+          if (oldArchive != null) {
+            oldArchive.copyStateTo(archive);
+            //LOG.info("update rrd archive: {} {}", oldArchive.getConsolFun(), oldArchive.getArcStep());
           }
         }
       }
-      Archive[] archives = db.getArchives();
-      for (int i = 0; i < archives.length; i++) {
-        Archive archive = archives[i];
-        final Archive oldArchive = old.getArchive(archive.getConsolFun(), archive.getSteps());
-        if(oldArchive!=null){
-          oldArchive.copyStateTo(archive);
-          //LOG.info("update rrd archive: {} {}", oldArchive.getConsolFun(), oldArchive.getArcStep());
-        }
-      }
+      Files.move(oldFile.toPath(), Paths.get(bakPath), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     }
-    Files.move(oldFile.toPath(), Paths.get(bakPath), StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
   }
 
   public static void main(String[] args) throws IOException, InterruptedException {
-    RrdDef rrdDef = buildRrdDef("/test/rrd/test.rrd");
-    for (int i = 0; i < 1000; i++) {
-      try(RrdDb rrdDb = RrdDbHelper.of(rrdDef)) {
-        //do something
-        Thread.sleep(3000);
-        System.out.println("i = " + i + ", rrdDb = " + rrdDb);
+
+    ExecutorService service = Executors.newFixedThreadPool(50);
+    int count =300;
+    int n = 5;
+    CountDownLatch countDownLatch = new CountDownLatch(n*count);
+    for (int i = 0; i < count; i++) {
+      int finalI = i;
+      RrdDef rrdDef = buildRrdDef("/test/rrd/test_"+i+".rrd");
+      for (int j = 0; j < n; j++) {
+        service.submit(()->{
+          try(RrdDb rrdDb = RrdDbHelper.of(rrdDef)) {
+            //do something
+            Thread.sleep(100);
+            int fileCount = RrdDbHelper.getRrdDbPool().getOpenFileCount();
+            System.out.println(finalI + " fileCount = " + fileCount);
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+          countDownLatch.countDown();
+        });
       }
     }
+    countDownLatch.await();
+    int fileCount = RrdDbHelper.getRrdDbPool().getOpenFileCount();
+    System.out.println("fileCount = " + fileCount);
+    service.shutdown();
   }
 
   private static RrdDef buildRrdDef(String rrdPath) {
@@ -115,7 +140,9 @@ public class RrdDbHelper {
     }
     RrdDef rrdDef;
     rrdDef = new RrdDef(rrdPath, 5);
-    for (String type  : Arrays.asList("cpu_user","cpu_wait")) {
+    for (String type  : Arrays.asList("cpu_user","cpu_wait","cpu_sys"
+        //,"men_free","men_used"
+    )) {
       rrdDef.addDatasource(type, DsType.GAUGE, 60, 0, Double.MAX_VALUE);
     }
     rrdDef.addArchive(ConsolFun.AVERAGE, 0.5, 1, 240);
